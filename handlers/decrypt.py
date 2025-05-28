@@ -1,54 +1,64 @@
-import os
-import base64
 import re
+import base64
 from aiogram import types
-from loader import dp  # Assure-toi que 'loader.py' initialise bien 'dp' et 'bot'
+from loader import dp
 
-# Ton lien de chaîne Telegram ici
-FIXED_CHANNEL_LINK = "https://t.me/connexiontoutreseaus"  # 🔗 Remplace par ton lien
+WELCOME_MESSAGE = (
+    "🔐 Deku Team 🔐\n"
+    "┌───────────────\n"
+    "├ • Channel : https://t.me/connexiontoutreseaus\n"
+    "├ • Thanks To : Anonyme\n"
+    "├ • ┅┅━━━━ 𖣫 ━━━━┅┅ •\n"
+)
 
-def extract_info(content: str, filename: str) -> str:
-    # Remplacer l'extraction automatique par un lien personnalisé
-    channel = FIXED_CHANNEL_LINK
+def extract_info(content: str):
+    """
+    Extrait le contenu encodé base64 à partir du texte complet.
+    """
+    # Recherche souple du texte après "Contenu :"
+    encoded_match = re.search(r"Contenu\s*:(.*)", content, re.DOTALL)
+    if not encoded_match:
+        return None
+    
+    encoded_text = encoded_match.group(1).strip()
+    if not encoded_text:
+        return None
+    
+    # Nettoyer pour garder uniquement base64 (optionnel)
+    encoded_text = re.sub(r"[^A-Za-z0-9+/=]+", "", encoded_text)
+    
+    try:
+        decoded_bytes = base64.b64decode(encoded_text)
+        decoded_text = decoded_bytes.decode("utf-8", errors="ignore")
+        return decoded_text if decoded_text else None
+    except Exception:
+        return None
 
-    thanks_match = re.search(r"Thanks To\s*:(.+)", content)
-    encoded_match = re.search(r"Contenu\s*:\s*([\s\S]+)", content)
-
-    thanks = thanks_match.group(1).strip() if thanks_match else "Anonyme"
-    encoded_text = encoded_match.group(1).strip() if encoded_match else None
-
-    if encoded_text:
-        try:
-            decoded = base64.b64decode(encoded_text).decode("utf-8", errors="ignore")
-        except Exception as e:
-            decoded = f"Erreur de décryptage : {e}"
-    else:
-        decoded = "Aucun contenu encodé trouvé."
-
-    return (
-        f"🔐 <b>Deku Team</b>\n"
-        f"├ 📁 <b>Fichier :</b> {filename}\n"
-        f"├ 🔗 <b>Channel :</b> {channel}\n"
-        f"├ 🙏 <b>Merci à :</b> {thanks}\n"
-        f"├ 🧩 <b>Contenu décrypté :</b>\n"
-        f"<code>{decoded[:4000]}</code>\n"
-        f"\n🤖 <i>Décrypté par @deku_filesbot</i>"
-    )
 
 @dp.message_handler(content_types=types.ContentType.DOCUMENT)
-async def handle_document(message: types.Message):
-    document = message.document
+async def decrypt(message: types.Message):
+    file = await message.document.get_file()
+    file_path = file.file_path
 
-    file_ext = os.path.splitext(document.file_name)[1].lower()
-    allowed_exts = [".hat", ".vpnlite", ".vpnglobe", ".sksplus"]
+    downloaded_file = await message.bot.download_file(file_path)
+    content = downloaded_file.read().decode("utf-8", errors="ignore")
 
-    if file_ext not in allowed_exts:
-        await message.reply("❌ Format de fichier non supporté.")
-        return
+    decrypted_content = extract_info(content)
 
-    file = await document.download()
-    with open(file.name, "r", encoding="utf-8", errors="ignore") as f:
-        content = f.read()
+    if decrypted_content:
+        response = (
+            f"{WELCOME_MESSAGE}"
+            f"├ 📁 Fichier : {message.document.file_name}\n"
+            f"├ 🧩 Contenu décrypté :\n{decrypted_content}\n"
+            f"├ • ┅┅━━━━ 𖣫 ━━━━┅┅ •\n"
+            f"🤖 Décrypté par @{(await message.bot.get_me()).username}"
+        )
+    else:
+        response = (
+            f"{WELCOME_MESSAGE}"
+            f"├ 📁 Fichier : {message.document.file_name}\n"
+            f"├ 🧩 Contenu décrypté : Aucun contenu encodé trouvé.\n"
+            f"🤖 Décrypté par @{(await message.bot.get_me()).username}"
+        )
 
-    reply_text = extract_info(content, document.file_name)
-    await message.reply(reply_text, parse_mode="HTML")
+    await message.answer(response)
