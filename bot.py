@@ -1,14 +1,10 @@
-from aiogram import Bot, Dispatcher, types, executor
-from handlers import decrypt
-import os
-from dotenv import load_dotenv
+from aiogram import Bot, Dispatcher, types
+from aiogram.utils import executor
+from handlers.decrypt import handle_document
+from loader import dp, bot
 
-load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
-bot = Bot(token=TOKEN)
-dp = Dispatcher(bot)
+# Enregistrement du handler
+dp.register_message_handler(handle_document, content_types=types.ContentType.DOCUMENT)
 
-dp.register_message_handler(decrypt, content_types=types.ContentType.DOCUMENT)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
