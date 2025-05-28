@@ -49,7 +49,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔐 Deku Team 🔐
 ┌───────────────
 ├ • {file_name}
-├ •Channel : https://t.me/DECRYPTFILE1
+├ •Channel : t.me/connexiontoutreseaus
 ├ •Thanks To :BOOS_TOOLS
 ├ • ┅┅━━━━ 𖣫 ━━━━┅┅ •
 ├ • 💠 Décrypté avec succès !
