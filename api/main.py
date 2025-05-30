@@ -4,10 +4,9 @@ from predictor import predict_match
 app = FastAPI()
 
 @app.get("/")
-def read_root():
-    return {"message": "API de prédiction de matchs"}
+def root():
+    return {"message": "API Prédiction OK"}
 
 @app.get("/predict")
-def get_prediction():
-    result = predict_match()
-    return {"prediction": result}
+def predict(team1: str, team2: str):
+    return predict_match(team1, team2)
