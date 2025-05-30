@@ -1,106 +1,50 @@
-require('dotenv').config();
+require('dotenv').config(); // Chargement des variables d'environnement
+
 const express = require('express');
+const fetch = require('node-fetch');
 const cors = require('cors');
-const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const API_TOKEN = process.env.API_TOKEN;
 
 app.use(cors());
 
-const FOOTBALL_API_BASE_URL = 'https://api.football-data.org/v4';
-const API_TOKEN = process.env.FOOTBALL_DATA_API_TOKEN;
-
-// Liste des ID de compétitions à surveiller
-const LEAGUE_IDS = [2015, 2021, 2016, 2019, 2002, 2014]; // Ligue 1, Premier League, etc.
-
-// ➤ Proxy /competitions (avec filtre client)
-app.get('/competitions', async (req, res) => {
+// Route principale du proxy
+app.get('/api/:endpoint*', async (req, res) => {
   try {
-    const response = await axios.get(`${FOOTBALL_API_BASE_URL}/competitions`, {
+    const endpoint = req.params.endpoint + (req.params[0] || '');
+    if (!endpoint) {
+      return res.status(400).json({ error: 'Endpoint requis.' });
+    }
+
+    const query = req.url.split('?')[1] || '';
+    const url = `https://api.football-data.org/v4/${endpoint}${query ? '?' + query : ''}`;
+
+    console.log(`↔️ Proxying request to: ${url}`);
+
+    const response = await fetch(url, {
       headers: { 'X-Auth-Token': API_TOKEN }
     });
 
-    const filtered = response.data.competitions.filter(comp =>
-      LEAGUE_IDS.includes(comp.id)
-    );
-
-    res.json({
-      count: filtered.length,
-      filters: {
-        client: 'Bitty alec'
-      },
-      competitions: filtered
-    });
-  } catch (error) {
-    console.error('Erreur API:', error.message);
-    res.status(500).json({ error: 'Erreur lors de l’appel à l’API football-data.org' });
-  }
-});
-
-// ➤ Route /predictions
-app.get('/predictions', async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
-  const predictions = [];
-
-  for (const leagueId of LEAGUE_IDS) {
-    try {
-      const matchRes = await axios.get(`${FOOTBALL_API_BASE_URL}/competitions/${leagueId}/matches`, {
-        headers: { 'X-Auth-Token': API_TOKEN },
-        params: { dateFrom: today, dateTo: today }
-      });
-
-      const matches = matchRes.data.matches;
-      if (!matches.length) continue;
-
-      const tableRes = await axios.get(`${FOOTBALL_API_BASE_URL}/competitions/${leagueId}/standings`, {
-        headers: { 'X-Auth-Token': API_TOKEN }
-      });
-
-      const standings = tableRes.data.standings[0].table;
-
-      for (const match of matches) {
-        const home = standings.find(t => t.team.id === match.homeTeam.id);
-        const away = standings.find(t => t.team.id === match.awayTeam.id);
-
-        const homeTeam = match.homeTeam.name;
-        const awayTeam = match.awayTeam.name;
-
-        const homeRank = home?.position || 10;
-        const awayRank = away?.position || 10;
-
-        let score = '1 - 1';
-        let winner = 'Égalité';
-
-        if (homeRank < awayRank) {
-          score = '2 - 1';
-          winner = homeTeam;
-        } else if (awayRank < homeRank) {
-          score = '1 - 2';
-          winner = awayTeam;
-        }
-
-        const totalGoals = score.split(' - ').reduce((a, b) => parseInt(a) + parseInt(b), 0);
-        const overUnder = totalGoals > 2 ? 'Over 2.5' : 'Under 2.5';
-
-        predictions.push({
-          competition: match.competition.name,
-          match: `${homeTeam} vs ${awayTeam}`,
-          score,
-          winner,
-          totalGoals,
-          overUnder
-        });
-      }
-    } catch (error) {
-      console.error(`Erreur pour la ligue ${leagueId}:`, error.message);
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `Erreur API: ${response.status}` });
     }
-  }
 
-  res.json({ predictions });
+    const data = await response.json();
+    res.json(data);
+
+  } catch (err) {
+    console.error('❌ Erreur serveur :', err.message);
+    res.status(500).json({ error: 'Erreur serveur: ' + err.message });
+  }
 });
 
-// ➤ Démarrage serveur
+// Test de fonctionnement
+app.get('/', (req, res) => {
+  res.send('🚀 Proxy Football API opérationnel.');
+});
+
 app.listen(PORT, () => {
-  console.log(`✅ Serveur démarré sur http://localhost:${PORT}`);
+  console.log(`✅ Proxy en ligne sur http://localhost:${PORT}`);
 });
