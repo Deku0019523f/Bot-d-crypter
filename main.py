@@ -1,22 +1,20 @@
 import os
 import json
+import random
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+)
 
-# Admins
-ADMINS = [1299831974, 6848373878]
-
-# Fichier des données
+ADMIN_IDS = [1299831974, 6848373878]
 DATA_FILE = "data.json"
 
-# Obtenir le token depuis Railway
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "w") as f:
+        json.dump({"users": {}, "history": []}, f)
 
-# Fonctions de gestion des données
 def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {}
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
@@ -24,183 +22,138 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-def is_admin(user_id):
-    return user_id in ADMINS
-
-def admin_only(func):
-    def wrapper(update: Update, context: CallbackContext):
-        user_id = update.effective_user.id
-        if not is_admin(user_id):
-            update.message.reply_text("⛔ Tu n'es pas autorisé à utiliser cette commande.")
-            return
-        return func(update, context)
-    return wrapper
-
-# Commandes de base
-def start(update: Update, context: CallbackContext):
-    user = update.effective_user
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
     data = load_data()
-    uid = str(user.id)
-
-    if is_admin(user.id):
-        update.message.reply_text("""
-Deku Prédiction:
-👋 Bienvenue administrateur !
-
-Vous avez un accès permanent à toutes les fonctionnalités.
-Tapez /help pour voir toutes les commandes disponibles.
-""")
-        return
-
-    if uid in data and data[uid].get("authorized"):
-        update.message.reply_text("✅ Bienvenue de retour ! Utilise /predictions pour commencer.")
+    if user_id in data["users"] and data["users"][user_id]["active"]:
+        if int(user_id) in ADMIN_IDS:
+            await update.message.reply_text(
+                "👋 Bienvenue administrateur !\n\n"
+                "Vous avez un accès permanent à toutes les fonctionnalités.\n"
+                "Tapez /help pour voir toutes les commandes disponibles."
+            )
+        else:
+            await update.message.reply_text("✅ Vous êtes déjà activé.")
     else:
-        update.message.reply_text("""
-Vous n'êtes pas enregistré. Veuillez entrer votre code d'accès avec la commande :
-/code VOTRECODE
+        await update.message.reply_text(
+            "⛔ Vous n'êtes pas enregistré.\n"
+            "Veuillez entrer votre code d'accès avec la commande :\n"
+            "`/code VOTRECODE`\n\n"
+            "Contactez l'admin : @Drissa310 ou @deku225",
+            parse_mode="Markdown"
+        )
 
-Veuillez contacter l'administrateur pour obtenir un code d'accès :
-Telegram : @Drissa310 ou @deku225
-""")
-
-def help_command(update: Update, context: CallbackContext):
-    if is_admin(update.effective_user.id):
-        update.message.reply_text("""
-🔑 Accès au bot :
-Pour utiliser ce bot, tu dois activer ton accès avec un code fourni par l'administrateur.
-
-1️⃣ Demande un code à l'administrateur.
-2️⃣ Tape la commande : /code VOTRECODE
-3️⃣ Si le code est valide, tu pourras accéder à toutes les fonctionnalités.
-4️⃣ Si tu rencontres un problème, contactes l'administrateur.
-
-Menu d'aide Administrateur :
-
-📱 Commandes de base :
-/start - Démarrer le bot
-/help - Afficher l'aide
-/myid - Afficher mon identifiant Telegram
-
-🎯 Prédictions :
-/predictions - pour prédire
-
-📊 Statistiques et recherche :
-/history - Voir tout l'historique
-/search motclé - Rechercher par ligue ou équipe
-/stats - Statistiques des prédictions
-
-👥 Gestion des utilisateurs (admin) :
-/add_user ID nombre - Ajouter un utilisateur avec un nombre de prédictions
-/deactivate id - Désactiver un utilisateur
-/reactivate id - Réactiver un utilisateur
-/list_users - Voir les utilisateurs actifs
-""")
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if int(user_id) in ADMIN_IDS:
+        await update.message.reply_text(
+            "📱 Commandes de base :\n"
+            "/start - Démarrer le bot\n"
+            "/help - Afficher l'aide\n"
+            "/myid - Obtenir mon ID Telegram\n\n"
+            "🎯 Prédiction :\n"
+            "/predictions\n"
+            "📊 Historique :\n"
+            "/history\n\n"
+            "👥 Gestion utilisateurs :\n"
+            "/add_user ID NOMBRE_TOTAL\n"
+        )
     else:
-        update.message.reply_text("Utilise /code VOTRECODE pour activer l'accès si tu en as un.")
+        await update.message.reply_text(
+            "🔑 Accès au bot :\n"
+            "1️⃣ Demande un code à l’admin\n"
+            "2️⃣ Tape : /code VOTRECODE\n"
+            "3️⃣ Si valide, tu auras accès.\n"
+            "Contact : @Drissa310 ou @deku225"
+        )
 
-def myid(update: Update, context: CallbackContext):
-    update.message.reply_text(f"🆔 Ton ID Telegram : {update.effective_user.id}")
-
-# Ajout utilisateur
-def code(update: Update, context: CallbackContext):
-    update.message.reply_text("🔐 Fonction de code d'accès non encore implémentée.")
-
-@admin_only
-def add_user(update: Update, context: CallbackContext):
-    if len(context.args) != 2:
-        update.message.reply_text("Utilisation : /add_user ID nombre")
-        return
-
-    user_id = context.args[0]
-    try:
-        predictions = int(context.args[1])
-    except ValueError:
-        update.message.reply_text("Le nombre doit être un entier.")
-        return
-
+async def predictions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
     data = load_data()
-    if user_id not in data:
-        data[user_id] = {
-            "name": "Inconnu",
-            "authorized": True,
-            "predictions_left": predictions,
-            "history": []
-        }
-    else:
-        data[user_id]["authorized"] = True
-        data[user_id]["predictions_left"] = predictions
+    user = data["users"].get(user_id)
 
-    save_data(data)
-    update.message.reply_text(f"✅ L'utilisateur {user_id} a été autorisé avec {predictions} prédictions.")
-
-# Prédiction
-
-def predictions(update: Update, context: CallbackContext):
-    uid = str(update.effective_user.id)
-    data = load_data()
-
-    if uid not in data or not data[uid].get("authorized"):
-        update.message.reply_text("⛔ Tu n'es pas autorisé. Entre un code avec /code.")
+    if not user or not user["active"]:
+        await update.message.reply_text("⛔ Tu n'es pas autorisé à utiliser cette commande.")
         return
 
-    if data[uid].get("predictions_left", 0) <= 0:
-        update.message.reply_text("🚫 Tu as atteint la limite de prédictions. Contacte l'administrateur.")
+    if user["used"] >= user["limit"]:
+        await update.message.reply_text("📉 Tu as atteint la limite de prédictions autorisées.")
         return
 
-    # Simuler une prédiction
-    fake_result = {
-        "team1": "Marseille",
-        "team2": "PSG",
-        "score": "2-1",
-        "fiability": "Haute",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    data[uid]["predictions_left"] -= 1
-    data[uid].setdefault("history", []).append(fake_result)
-    save_data(data)
+    team1 = random.choice(["PSG", "Barça", "Man City"])
+    team2 = random.choice(["Real Madrid", "Liverpool", "Juventus"])
+    score = f"{random.randint(0,3)} - {random.randint(0,3)}"
+    fiability = random.choice(["🔴 Faible", "🟡 Moyenne", "🟢 Élevée"])
 
-    update.message.reply_text(
-        f"🎯 Prédiction : {fake_result['team1']} vs {fake_result['team2']}\n"
-        f"Score prédit : {fake_result['score']}\n"
-        f"Fiabilité : {fake_result['fiability']}\n"
-        f"Il te reste {data[uid]['predictions_left']} prédictions."
+    response = (
+        f"📊 Résultat simulé :\n"
+        f"{team1} vs {team2}\n"
+        f"Score prédit : {score}\n"
+        f"Fiabilité : {fiability}"
     )
+    await update.message.reply_text(response)
 
-# Historique
-def history(update: Update, context: CallbackContext):
-    uid = str(update.effective_user.id)
+    # Enregistrer
+    user["used"] += 1
+    data["history"].append({
+        "user_id": user_id,
+        "teams": f"{team1} vs {team2}",
+        "score": score,
+        "fiability": fiability,
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    save_data(data)
+
+async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if int(user_id) not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Tu n'es pas admin.")
+        return
+
+    try:
+        target_id = context.args[0]
+        limit = int(context.args[1])
+        data = load_data()
+        data["users"][target_id] = {
+            "active": True,
+            "limit": limit,
+            "used": 0
+        }
+        save_data(data)
+        await update.message.reply_text(f"✅ Utilisateur {target_id} activé avec {limit} prédictions.")
+    except:
+        await update.message.reply_text("❌ Utilisation : /add_user ID NOMBRE_TOTAL")
+
+async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = load_data()
-
-    if uid not in data or not data[uid].get("authorized"):
-        update.message.reply_text("⛔ Tu n'es pas autorisé.")
+    if not data["history"]:
+        await update.message.reply_text("Aucune prédiction encore enregistrée.")
         return
 
-    history = data[uid].get("history", [])
-    if not history:
-        update.message.reply_text("📭 Aucun historique de prédiction.")
-        return
+    latest = data["history"][-5:]
+    msg = "🕘 Dernières prédictions :\n\n"
+    for h in latest:
+        msg += f"{h['date']} - {h['teams']} => {h['score']} ({h['fiability']})\n"
+    await update.message.reply_text(msg)
 
-    msg = "🕘 Historique de prédictions :\n\n"
-    for h in history[-10:]:
-        msg += f"{h['timestamp']} - {h['team1']} vs {h['team2']} → {h['score']} ({h['fiability']})\n"
-    update.message.reply_text(msg)
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"🆔 Ton ID : {update.effective_user.id}")
 
-# Config du bot
-def main():
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+if __name__ == "__main__":
+    import asyncio
+    import logging
 
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("myid", myid))
-    dispatcher.add_handler(CommandHandler("code", code))
-    dispatcher.add_handler(CommandHandler("add_user", add_user))
-    dispatcher.add_handler(CommandHandler("predictions", predictions))
-    dispatcher.add_handler(CommandHandler("history", history))
+    logging.basicConfig(level=logging.INFO)
+    TOKEN = os.getenv("BOT_TOKEN")  # Railway gère ce token
 
-    updater.start_polling()
-    updater.idle()
+    app = ApplicationBuilder().token(TOKEN).build()
 
-if __name__ == '__main__':
-    main()
-    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("add_user", add_user))
+    app.add_handler(CommandHandler("predictions", predictions))
+    app.add_handler(CommandHandler("history", history))
+
+    print("🤖 Bot démarré.")
+    asyncio.run(app.run_polling())
