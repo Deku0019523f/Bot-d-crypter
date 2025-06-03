@@ -1,16 +1,4 @@
 {
-  "7823708309": {
-    "name": "Nom de l'utilisateur",
-    "authorized": true,
-    "predictions_left": 5,
-    "history": [
-      {
-        "team1": "Marseille",
-        "team2": "Chelsea",
-        "score": "2-1",
-        "fiability": "Haute",
-        "timestamp": "2025-06-03 15:12:34"
-      }
-    ]
-  }
+  "users": {},
+  "history": []
 }
